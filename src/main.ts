@@ -24,6 +24,8 @@ async function bootstrap() {
   )
   await app.listen(envs.port);
 
+  console.log('Probando submodulos - Segundo Cambio');
+
   logger.log(`Gateway corriendo en el puero ${envs.port}`)
 }
 bootstrap();
