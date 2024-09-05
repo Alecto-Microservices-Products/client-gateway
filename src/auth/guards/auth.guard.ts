@@ -1,38 +1,42 @@
-
 import {
-    CanActivate,
-    ExecutionContext,
-    Injectable,
-    UnauthorizedException,
-  } from '@nestjs/common';
-  import { Request } from 'express';
-  
-  @Injectable()
-  export class AuthGuard implements CanActivate {
-    constructor() {}
-  
-    async canActivate(context: ExecutionContext): Promise<boolean> {
-      const request = context.switchToHttp().getRequest();
-      const token = this.extractTokenFromHeader(request);
-      if (!token) {
-        throw new UnauthorizedException('No Existe el token');
-      }
-      try {
-        request['user'] = {
-            id: 1,
-            name: 'Pedro',
-            email:'pedro@gmail.com'
-        };
+  CanActivate,
+  ExecutionContext,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { Request } from 'express';
+import { firstValueFrom } from 'rxjs';
+import { NATS_SERVICE } from 'src/config';
 
-        request['token'] = token;
-      } catch {
-        throw new UnauthorizedException();
-      }
-      return true;
+@Injectable()
+export class AuthGuard implements CanActivate {
+  constructor(@Inject(NATS_SERVICE) private readonly client: ClientProxy) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const token = this.extractTokenFromHeader(request);
+    if (!token) {
+      throw new UnauthorizedException('No Existe el token');
     }
-  
-    private extractTokenFromHeader(request: Request): string | undefined {
-      const [type, token] = request.headers.authorization?.split(' ') ?? [];
-      return type === 'Bearer' ? token : undefined;
+    try {
+      const {user, token: newToken} =  await firstValueFrom(
+        this.client.send('auth.verify.user', token)
+      )
+
+      request['user'] = user;
+      request['token'] = newToken;
+    } catch {
+      throw new UnauthorizedException();
     }
+    return true;
   }
+
+  private extractTokenFromHeader(request: Request): string | undefined {
+    
+    
+    const [type, token] = request.headers.authorization?.split(' ') ?? [];
+    return type === 'Bearer' ? token : undefined;
+  }
+}
